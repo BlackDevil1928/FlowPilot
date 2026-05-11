@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlowPilot</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="popup-logo">
+        <img src="../icons/icon128.png" alt="FlowPilot" class="popup-icon" />
+        <div class="popup-title-group">
+          <h1 class="popup-title">FlowPilot</h1>
+          <span class="popup-subtitle">Claude Auto Resume</span>
+        </div>
+      </div>
+      <div class="popup-badge" id="statusBadge">Idle</div>
+    </header>
+
+    <!-- Status Card -->
+    <section class="popup-card" id="statusCard">
+      <div class="status-row">
+        <span class="status-label">Status</span>
+        <span class="status-value" id="statusText">Monitoring…</span>
+      </div>
+      <div class="status-row" id="retryRow" style="display:none;">
+        <span class="status-label">Resume at</span>
+        <span class="status-value status-highlight" id="retryTime">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Retries</span>
+        <span class="status-value" id="retryCount">0</span>
+      </div>
+      <div class="status-row" id="urlRow" style="display:none;">
+        <span class="status-label">Chat</span>
+        <a class="status-value status-link" id="chatUrl" href="#" target="_blank">Open →</a>
+      </div>
+    </section>
+
+    <!-- Actions -->
+    <section class="popup-actions">
+      <button class="popup-btn popup-btn-secondary" id="cancelBtn" disabled>
+        Cancel Resume
+      </button>
+      <button class="popup-btn popup-btn-danger" id="resetBtn">
+        Reset All
+      </button>
+    </section>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span>v1.0.0</span>
+      <span>·</span>
+      <span>Works on <strong>claude.ai</strong></span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

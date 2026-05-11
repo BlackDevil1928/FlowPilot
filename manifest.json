@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "FlowPilot — Claude Auto Resume",
+  "version": "1.0.0",
+  "description": "Automatically resumes Claude.ai conversations when free message limits hit. Set it once, it handles the rest.",
+  "permissions": [
+    "alarms",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://claude.ai/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": [
+        "src/storage/state-manager.js",
+        "src/utils/time-parser.js",
+        "src/utils/helpers.js",
+        "src/content/limit-detector.js",
+        "src/content/completion-detector.js",
+        "src/content/resume-engine.js",
+        "src/ui/button-injector.js",
+        "src/content/content.js"
+      ],
+      "css": ["src/styles/floating-button.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon128.png",
+      "48": "icons/icon128.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon128.png",
+    "48": "icons/icon128.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://claude.ai/*"]
+    }
+  ]
+}
