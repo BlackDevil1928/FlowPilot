@@ -88,19 +88,36 @@ function waitForTabLoad(tabId) {
 
 /**
  * Send a TRIGGER_RESUME message to the content script in the given tab.
+ * This is fire-and-forget — we don't need a meaningful response.
  */
 async function sendResumeMessage(tabId) {
-  try {
-    await chrome.tabs.sendMessage(tabId, { type: 'TRIGGER_RESUME' });
-    console.log('[FlowPilot BG] Resume trigger sent to tab', tabId);
-  } catch (err) {
-    console.warn('[FlowPilot BG] Could not send message, retrying…', err);
-    // Content script might not be ready — retry after delay
-    await new Promise((r) => setTimeout(r, 5000));
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 3000;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      await chrome.tabs.sendMessage(tabId, { type: 'TRIGGER_RESUME' });
-    } catch (retryErr) {
-      console.error('[FlowPilot BG] Retry failed:', retryErr);
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'TRIGGER_RESUME' });
+      console.log('[FlowPilot BG] Resume trigger sent to tab', tabId, response);
+      return; // success
+    } catch (err) {
+      const isChannelError = err.message && err.message.includes('message channel closed');
+      const isNoReceiver = err.message && err.message.includes('Receiving end does not exist');
+
+      if (isChannelError) {
+        // Content script received the message but the channel closed before
+        // sendResponse was called. The message WAS delivered — this is OK.
+        console.log('[FlowPilot BG] Message delivered (channel closed — this is fine)');
+        return;
+      }
+
+      console.warn(`[FlowPilot BG] Attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
+
+      if (attempt < MAX_RETRIES) {
+        // Content script not ready yet — wait and retry
+        await new Promise((r) => setTimeout(r, RETRY_DELAY));
+      } else {
+        console.error('[FlowPilot BG] All retries exhausted. Content script may not be loaded.');
+      }
     }
   }
 }

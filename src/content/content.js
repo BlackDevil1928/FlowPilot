@@ -36,8 +36,8 @@
 
       // Listen for messages from background service worker
       chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-        this._onMessage(msg, sender, sendResponse);
-        return true;
+        this._onMessage(msg, sendResponse);
+        return true; // keep channel open for async sendResponse
       });
 
       // Check if we should resume (page opened by alarm)
@@ -147,19 +147,30 @@
 
     /**
      * Handle messages from background service worker.
+     * Must call sendResponse() in every path to avoid channel-closed errors.
      */
-    async _onMessage(msg) {
+    async _onMessage(msg, sendResponse) {
       console.log('[FlowPilot] Message received:', msg.type);
 
-      switch (msg.type) {
-        case 'TRIGGER_RESUME':
-          await this._executeResume();
-          break;
+      try {
+        switch (msg.type) {
+          case 'TRIGGER_RESUME':
+            sendResponse({ received: true });
+            await this._executeResume();
+            break;
 
-        case 'GET_STATUS': {
-          const status = await StateManager.getStatus();
-          return { status };
+          case 'GET_STATUS': {
+            const status = await StateManager.getStatus();
+            sendResponse({ status });
+            break;
+          }
+
+          default:
+            sendResponse({ error: 'unknown message type' });
         }
+      } catch (err) {
+        console.error('[FlowPilot] Message handler error:', err);
+        sendResponse({ error: err.message });
       }
     }
 
