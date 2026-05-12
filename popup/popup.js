@@ -10,6 +10,7 @@
   const STORAGE_KEYS = [
     'car_state', 'car_autoMode', 'car_retryTime',
     'car_retryTimeDisplay', 'car_chatUrl', 'car_retryCount',
+    'car_customCommand',
   ];
 
   const STATUS_LABELS = {
@@ -70,6 +71,15 @@
       link.textContent = 'Open →';
     } else {
       urlRow.style.display = 'none';
+    }
+
+    // Command
+    const cmdRow = $('cmdRow');
+    if (data.car_customCommand && state !== 'idle') {
+      cmdRow.style.display = 'flex';
+      $('cmdText').textContent = data.car_customCommand;
+    } else {
+      cmdRow.style.display = 'none';
     }
 
     // Cancel button — enabled only when scheduled or resuming

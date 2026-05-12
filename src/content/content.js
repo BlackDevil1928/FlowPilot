@@ -1,12 +1,14 @@
 /**
  * Content Script — Main orchestrator for FlowPilot
  *
- * This is the entry point loaded last in the content script chain.
- * It wires all modules together and manages the lifecycle:
- *
- *   init → detect limits → schedule resume → execute resume → detect completion
- *              ↑                                                    |
- *              └────────────── (if limit hit again) ────────────────┘
+ * NEW FLOW (manual activation only):
+ *   1. Extension watches for limit messages passively
+ *   2. When limit detected → icon pulses amber
+ *   3. User clicks icon → input popup appears → user types command
+ *   4. User submits → extension schedules alarm + stores command
+ *   5. At retry time → sends the stored command
+ *   6. If limit again + autoMode → auto-re-schedules (same command)
+ *   7. Done when generation completes
  */
 (function () {
   'use strict';
@@ -21,49 +23,49 @@
       this._initialized = false;
     }
 
-    /** Bootstrap everything */
     async init() {
       if (this._initialized) return;
       this._initialized = true;
       console.log('[FlowPilot] Initializing on', window.location.href);
 
-      // Inject the floating button
+      // Inject the floating icon button
       this.button.inject(() => this._onButtonClick());
 
-      // Start listening for limit messages
+      // Start watching for limit messages
       this.limitDetector.start((text) => this._onLimitDetected(text));
 
       // Listen for messages from background service worker
       chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         this._onMessage(msg, sender, sendResponse);
-        return true; // keep channel open for async
+        return true;
       });
 
-      // Check if we need to resume (e.g., page was just opened by alarm)
+      // Check if we should resume (page opened by alarm)
       await this._checkResumeState();
 
-      // Sync button state with stored state
+      // Sync button with stored state
       await this._syncButtonState();
 
       console.log('[FlowPilot] Ready ✓');
     }
 
-    /* ── Event Handlers ──────────────────────────────────────────── */
+    /* ── Event Handlers ──────────────────────────────────── */
 
     /**
-     * Called when LimitDetector finds a limit message.
+     * Limit message detected by MutationObserver.
+     * Updates state, pulses the icon, but does NOT auto-schedule
+     * UNLESS autoMode is already active (user clicked before).
      */
     async _onLimitDetected(limitText) {
       const parsed = TimeParser.parse(limitText);
       const status = await StateManager.getStatus();
 
-      // Don't re-detect if we're already handling it
+      // Don't re-detect if already handling
       if (status === STATES.SCHEDULED || status === STATES.RESUMING) return;
 
       console.log('[FlowPilot] Limit detected, parsed:', parsed);
 
       if (parsed) {
-        // Store limit info
         await StateManager.set({
           [StateManager.K.STATE]: STATES.LIMIT_DETECTED,
           [StateManager.K.RETRY_TIME]: parsed.timestamp,
@@ -73,21 +75,20 @@
 
         this.button.setState('limit_detected', parsed.timeStr, parsed.timestamp);
 
-        // If auto-mode is ON (user already clicked once), auto-schedule
+        // Only auto-schedule if user already activated (re-hit scenario)
         const autoMode = await StateManager.isAutoMode();
         if (autoMode) {
-          console.log('[FlowPilot] Auto-mode active, scheduling automatically');
+          console.log('[FlowPilot] Auto-mode active, re-scheduling with same command');
           await this._scheduleResume(parsed.timestamp, parsed.timeStr);
         }
       } else {
-        // Limit detected but couldn't parse time — show generic state
         await StateManager.setStatus(STATES.LIMIT_DETECTED);
         this.button.setState('limit_detected', '');
       }
     }
 
     /**
-     * Called when user clicks the floating button.
+     * User clicks the floating icon.
      */
     async _onButtonClick() {
       const status = await StateManager.getStatus();
@@ -95,41 +96,57 @@
       switch (status) {
         case STATES.IDLE:
         case STATES.COMPLETED:
-          // Nothing to do yet — inform user
-          console.log('[FlowPilot] No limit detected yet. Will activate when limit appears.');
-          // Pre-enable auto mode so when limit IS detected, we auto-schedule
-          await StateManager.setAutoMode(true);
-          this.button.setState('idle');
+          // No limit detected yet — do nothing
+          console.log('[FlowPilot] No limit detected. Waiting.');
           break;
 
         case STATES.LIMIT_DETECTED: {
-          // User wants to auto-resume — schedule it
-          await StateManager.setAutoMode(true);
-          const data = await StateManager.getAll();
-          const retryTime = data[StateManager.K.RETRY_TIME];
-          const retryDisplay = data[StateManager.K.RETRY_DISPLAY];
-          if (retryTime) {
-            await this._scheduleResume(retryTime, retryDisplay);
-          } else {
-            console.warn('[FlowPilot] Retry time not available');
+          // Show input popup so user can type their command
+          if (this.button.isPopupOpen()) {
+            this.button.hideInputPopup();
+            return;
           }
+          const data = await StateManager.getAll();
+          const retryDisplay = data[StateManager.K.RETRY_DISPLAY] || '';
+          this.button.showInputPopup(retryDisplay, (command) => this._onCommandSubmit(command));
           break;
         }
 
         case STATES.SCHEDULED:
-          // Cancel the scheduled resume
+          // Click while scheduled → cancel
           console.log('[FlowPilot] Cancelling scheduled resume');
           await this._cancelResume();
           break;
 
         case STATES.RESUMING:
-          // Do nothing while resuming
+          // Do nothing while actively resuming
           break;
       }
     }
 
     /**
-     * Handle messages from the background service worker.
+     * User submitted their command from the input popup.
+     */
+    async _onCommandSubmit(command) {
+      console.log('[FlowPilot] Command set:', command);
+
+      // Store the command and enable auto-mode
+      await StateManager.set({ [StateManager.K.CUSTOM_CMD]: command });
+      await StateManager.setAutoMode(true);
+
+      const data = await StateManager.getAll();
+      const retryTime = data[StateManager.K.RETRY_TIME];
+      const retryDisplay = data[StateManager.K.RETRY_DISPLAY];
+
+      if (retryTime) {
+        await this._scheduleResume(retryTime, retryDisplay);
+      } else {
+        console.warn('[FlowPilot] Retry time not available');
+      }
+    }
+
+    /**
+     * Handle messages from background service worker.
      */
     async _onMessage(msg) {
       console.log('[FlowPilot] Message received:', msg.type);
@@ -146,19 +163,14 @@
       }
     }
 
-    /* ── Core Logic ──────────────────────────────────────────────── */
+    /* ── Core Logic ──────────────────────────────────────── */
 
-    /**
-     * Schedule a resume via chrome.alarms through the background SW.
-     */
     async _scheduleResume(retryTimestamp, retryDisplay) {
       console.log('[FlowPilot] Scheduling resume for', retryDisplay);
 
-      // Persist the schedule
       await StateManager.scheduleResume(retryTimestamp, retryDisplay, window.location.href);
       await StateManager.incrementRetryCount();
 
-      // Request alarm from background
       chrome.runtime.sendMessage({
         type: 'SCHEDULE_ALARM',
         retryTime: retryTimestamp,
@@ -168,20 +180,15 @@
       this.button.setState('scheduled', retryDisplay, retryTimestamp);
     }
 
-    /**
-     * Cancel a scheduled resume.
-     */
     async _cancelResume() {
       chrome.runtime.sendMessage({ type: 'CANCEL_ALARM' });
       await StateManager.setAutoMode(false);
       await StateManager.reset();
       this.limitDetector.resetDetection();
+      this.button.hideInputPopup();
       this.button.setState('idle');
     }
 
-    /**
-     * Execute the resume sequence (called after alarm fires).
-     */
     async _executeResume() {
       console.log('[FlowPilot] ▶ Executing resume sequence');
       this.button.setState('resuming');
@@ -202,9 +209,9 @@
           break;
 
         case 'limit_hit':
-          console.log('[FlowPilot] ⏰ Limit hit again, will re-schedule');
-          // LimitDetector will pick up the new limit message
-          // and auto-schedule because autoMode is still true
+          console.log('[FlowPilot] ⏰ Limit hit again, auto-mode will re-schedule');
+          // LimitDetector will detect the new message and
+          // auto-schedule because autoMode is still true
           this.limitDetector.resetDetection();
           await StateManager.setStatus(STATES.LIMIT_DETECTED);
           this.button.setState('limit_detected');
@@ -212,32 +219,23 @@
 
         case 'error':
           console.warn('[FlowPilot] ❌ Resume failed, retrying in 60s');
-          // Schedule a quick retry
           const retryIn = Date.now() + 60000;
           await this._scheduleResume(retryIn, 'retry');
           break;
       }
     }
 
-    /**
-     * On page load, check if we're supposed to be resuming.
-     * (e.g., background opened this tab after alarm fired)
-     */
     async _checkResumeState() {
       const status = await StateManager.getStatus();
       console.log('[FlowPilot] Current state on load:', status);
 
       if (status === STATES.RESUMING) {
-        // We were opened by the alarm — execute resume
         console.log('[FlowPilot] Resuming from stored state…');
-        await Helpers.sleep(2000, 1000); // let page settle
+        await Helpers.sleep(2000, 1000);
         await this._executeResume();
       }
     }
 
-    /**
-     * Sync the button's visual state with stored state.
-     */
     async _syncButtonState() {
       const data = await StateManager.getAll();
       const status = data[StateManager.K.STATE] || STATES.IDLE;
@@ -247,7 +245,7 @@
     }
   }
 
-  /* ── Bootstrap ───────────────────────────────────────────────── */
+  /* ── Bootstrap ─────────────────────────────────────────── */
   const controller = new FlowPilotController();
   controller.init().catch((err) =>
     console.error('[FlowPilot] Init failed:', err)

@@ -232,6 +232,115 @@
 }
 
 /* ─────────────────────────────────────── */
+/* Command Input Popup                     */
+/* ─────────────────────────────────────── */
+.car-input-popup {
+  position: fixed;
+  bottom: 165px;
+  right: 24px;
+  z-index: 2147483647;
+  width: 290px;
+
+  background: rgba(18, 18, 32, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55),
+              0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  animation: car-popup-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.car-input-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.car-input-hint {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.car-input-hint strong {
+  color: #34d399;
+  font-weight: 600;
+}
+
+.car-input-field {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.car-input-field:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.car-input-field::placeholder {
+  color: #475569;
+}
+
+.car-input-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.car-input-btn {
+  flex: 1;
+  padding: 9px 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+}
+
+.car-input-cancel-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.car-input-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+.car-input-submit-btn {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(52, 211, 153, 0.3));
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+.car-input-submit-btn:hover {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.3), rgba(52, 211, 153, 0.45));
+  box-shadow: 0 2px 12px rgba(52, 211, 153, 0.15);
+}
+
+@keyframes car-popup-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─────────────────────────────────────── */
 /* Light mode                              */
 /* ─────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
@@ -253,4 +362,28 @@
   .car-check-badge {
     border-color: rgba(255, 255, 255, 0.95);
   }
+  .car-input-popup {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  }
+  .car-input-title { color: #1e293b; }
+  .car-input-hint { color: #64748b; }
+  .car-input-hint strong { color: #059669; }
+  .car-input-field {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #1e293b;
+  }
+  .car-input-cancel-btn {
+    background: rgba(0, 0, 0, 0.04);
+    color: #64748b;
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+  .car-input-submit-btn {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.18));
+    color: #059669;
+    border-color: rgba(16, 185, 129, 0.2);
+  }
 }
+

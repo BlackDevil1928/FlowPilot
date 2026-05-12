@@ -146,6 +146,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(() => chrome.storage.local.remove([
           'car_state', 'car_autoMode', 'car_retryTime',
           'car_retryTimeDisplay', 'car_chatUrl', 'car_retryCount',
+          'car_customCommand',
         ]))
         .then(() => sendResponse({ success: true }))
         .catch((err) => sendResponse({ success: false, error: err.message }));

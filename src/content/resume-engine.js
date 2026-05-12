@@ -1,11 +1,13 @@
 /**
- * ResumeEngine — Handles the actual automation of resuming Claude's generation.
+ * ResumeEngine — Handles resuming Claude's generation.
+ *
+ * Uses the user's custom command from storage (set via the input popup).
  *
  * Strategy:
  *  1. Wait for page DOM to be ready
- *  2. Try clicking "Continue generating" button
- *  3. Fallback: type "continue" and submit
- *  4. Monitor completion
+ *  2. Try clicking "Continue generating" button (native Claude feature)
+ *  3. Fallback: type the user's custom command and submit
+ *  4. Monitor for completion
  */
 (function () {
   'use strict';
@@ -21,6 +23,7 @@
 
     /**
      * Execute the resume sequence.
+     * Reads the custom command from storage.
      * @returns {Promise<'completed'|'limit_hit'|'error'>}
      */
     async execute() {
@@ -29,16 +32,20 @@
       try {
         await StateManager.setStatus(STATES.RESUMING);
 
-        // 1. Wait for the page to fully load
-        console.log('[FlowPilot] Waiting for page readiness…');
-        await Helpers.sleep(3000, 2000); // 3-5s for React hydration
+        // Get the user's custom command from storage
+        const customCommand = (await StateManager.get(StateManager.K.CUSTOM_CMD)) || 'continue';
+        console.log('[FlowPilot] Custom command:', customCommand);
 
-        // 2. Attempt primary action: click "Continue generating"
+        // 1. Wait for page to fully load + React hydration
+        console.log('[FlowPilot] Waiting for page readiness…');
+        await Helpers.sleep(3000, 2000);
+
+        // 2. Primary: try clicking "Continue generating" button
         const continued = await this._tryContinueButton();
 
         if (!continued) {
-          // 3. Fallback: type and send "continue"
-          const sent = await this._trySendContinue();
+          // 3. Fallback: type the user's custom command and send
+          const sent = await this._trySendMessage(customCommand);
           if (!sent) {
             console.warn('[FlowPilot] Could not find any way to continue');
             return 'error';
@@ -47,7 +54,7 @@
 
         // 4. Monitor for completion
         console.log('[FlowPilot] Monitoring generation…');
-        await Helpers.sleep(2000, 1000); // let streaming begin
+        await Helpers.sleep(2000, 1000);
         const isComplete = await this.completionDetector.waitForCompletion();
 
         if (isComplete) {
@@ -67,10 +74,8 @@
      * Try to find and click the "Continue generating" button.
      */
     async _tryContinueButton() {
-      // Try several text variations
       const variations = [
         'continue generating',
-        'continue',
         'resume',
         'try again',
       ];
@@ -79,32 +84,33 @@
         const btn = Helpers.findButtonByText(text);
         if (btn) {
           console.log(`[FlowPilot] Found button: "${text}"`);
-          await Helpers.sleep(500, 500); // human-like pause
+          await Helpers.sleep(500, 500);
           btn.click();
           await Helpers.sleep(1000, 500);
           return true;
         }
       }
 
-      console.log('[FlowPilot] No continue button found, trying fallback…');
+      console.log('[FlowPilot] No continue button found, using custom command…');
       return false;
     }
 
     /**
-     * Fallback: Type "continue" into the textarea and submit.
+     * Type the user's custom command into the textarea and submit.
+     * @param {string} message — the command to send
      */
-    async _trySendContinue() {
+    async _trySendMessage(message) {
       const textarea = Helpers.findTextarea();
       if (!textarea) {
         console.warn('[FlowPilot] No textarea found');
         return false;
       }
 
-      console.log('[FlowPilot] Typing "continue" into textarea');
-      await Helpers.typeText(textarea, 'continue');
+      console.log(`[FlowPilot] Typing: "${message}"`);
+      await Helpers.typeText(textarea, message);
       await Helpers.sleep(500, 300);
 
-      // Try to find and click the send/submit button
+      // Try to find and click the send button
       const sendBtn =
         Helpers.findButtonByText('send') ||
         document.querySelector('button[aria-label*="send" i]') ||
@@ -114,7 +120,6 @@
         console.log('[FlowPilot] Clicking send button');
         sendBtn.click();
       } else {
-        // Fallback: press Enter
         console.log('[FlowPilot] No send button, pressing Enter');
         Helpers.pressEnter(textarea);
       }
@@ -123,7 +128,6 @@
       return true;
     }
 
-    /** Abort any running detection */
     abort() {
       this.completionDetector.stop();
     }

@@ -15,6 +15,7 @@
     RETRY_DISPLAY: 'car_retryTimeDisplay',
     CHAT_URL: 'car_chatUrl',
     RETRY_COUNT: 'car_retryCount',
+    CUSTOM_CMD: 'car_customCommand',
   };
 
   /** Possible extension states */
