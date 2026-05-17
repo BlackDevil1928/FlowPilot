@@ -14,8 +14,10 @@
     RETRY_TIME: 'car_retryTime',
     RETRY_DISPLAY: 'car_retryTimeDisplay',
     CHAT_URL: 'car_chatUrl',
+    CHAT_ID: 'car_chatId',
     RETRY_COUNT: 'car_retryCount',
     CUSTOM_CMD: 'car_customCommand',
+    LAST_CMD: 'car_lastCommand',
   };
 
   /** Possible extension states */
@@ -77,12 +79,13 @@
     },
 
     /** Persist a scheduled resume */
-    async scheduleResume(retryTime, retryTimeDisplay, chatUrl) {
+    async scheduleResume(retryTime, retryTimeDisplay, chatUrl, chatId) {
       return this.set({
         [K.STATE]: STATES.SCHEDULED,
         [K.RETRY_TIME]: retryTime,
         [K.RETRY_DISPLAY]: retryTimeDisplay,
         [K.CHAT_URL]: chatUrl,
+        [K.CHAT_ID]: chatId,
       });
     },
 

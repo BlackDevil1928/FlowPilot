@@ -68,7 +68,10 @@
       urlRow.style.display = 'flex';
       const link = $('chatUrl');
       link.href = data.car_chatUrl;
-      link.textContent = 'Open →';
+      
+      // Use the stored chatId or extract from URL for display
+      const chatId = data.car_chatId || (data.car_chatUrl.match(/\/chat\/([a-f0-9-]{36})/i) || [])[1];
+      link.textContent = chatId ? `Chat ${chatId.slice(0, 8)}…` : 'Open Chat →';
     } else {
       urlRow.style.display = 'none';
     }

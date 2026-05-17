@@ -71,15 +71,25 @@
           [StateManager.K.RETRY_TIME]: parsed.timestamp,
           [StateManager.K.RETRY_DISPLAY]: parsed.timeStr,
           [StateManager.K.CHAT_URL]: window.location.href,
+          [StateManager.K.CHAT_ID]: Helpers.extractChatId(window.location.href),
         });
 
         this.button.setState('limit_detected', parsed.timeStr, parsed.timestamp);
 
-        // Only auto-schedule if user already activated (re-hit scenario)
+        // Only auto-schedule if:
+        // 1. autoMode is active (user previously clicked 'Schedule')
+        // 2. We are still in the SAME conversation
+        const currentChatId = Helpers.extractChatId(window.location.href);
+        const storedChatId = await StateManager.get(StateManager.K.CHAT_ID);
         const autoMode = await StateManager.isAutoMode();
-        if (autoMode) {
-          console.log('[FlowPilot] Auto-mode active, re-scheduling with same command');
+
+        if (autoMode && currentChatId && currentChatId === storedChatId) {
+          console.log('[FlowPilot] Auto-mode active for this chat, re-scheduling with same command');
           await this._scheduleResume(parsed.timestamp, parsed.timeStr);
+        } else if (autoMode) {
+          // If we're in a new chat, we should NOT auto-resume from a previous chat's settings
+          console.log('[FlowPilot] New chat detected, disabling auto-mode from previous session');
+          await StateManager.setAutoMode(false);
         }
       } else {
         await StateManager.setStatus(STATES.LIMIT_DETECTED);
@@ -139,7 +149,9 @@
       const retryDisplay = data[StateManager.K.RETRY_DISPLAY];
 
       if (retryTime) {
-        await this._scheduleResume(retryTime, retryDisplay);
+        // Automatically use "continue" as default if none set
+        const cmd = command || (await StateManager.get(StateManager.K.CUSTOM_CMD)) || 'continue';
+        await this._scheduleResume(retryTime, retryDisplay, cmd);
       } else {
         console.warn('[FlowPilot] Retry time not available');
       }
@@ -176,16 +188,24 @@
 
     /* ── Core Logic ──────────────────────────────────────── */
 
-    async _scheduleResume(retryTimestamp, retryDisplay) {
+    async _scheduleResume(retryTimestamp, retryDisplay, customCommand) {
       console.log('[FlowPilot] Scheduling resume for', retryDisplay);
 
-      await StateManager.scheduleResume(retryTimestamp, retryDisplay, window.location.href);
+      const chatUrl = window.location.href;
+      const chatId = Helpers.extractChatId(chatUrl);
+
+      await StateManager.scheduleResume(retryTimestamp, retryDisplay, chatUrl, chatId);
       await StateManager.incrementRetryCount();
+
+      // Ensure we have a command to send
+      const cmd = customCommand || (await StateManager.get(StateManager.K.CUSTOM_CMD)) || 'continue';
 
       chrome.runtime.sendMessage({
         type: 'SCHEDULE_ALARM',
         retryTime: retryTimestamp,
-        chatUrl: window.location.href,
+        chatUrl: chatUrl,
+        chatId: chatId,
+        customCommand: cmd
       });
 
       this.button.setState('scheduled', retryDisplay, retryTimestamp);
@@ -222,7 +242,7 @@
         case 'limit_hit':
           console.log('[FlowPilot] ⏰ Limit hit again, auto-mode will re-schedule');
           // LimitDetector will detect the new message and
-          // auto-schedule because autoMode is still true
+          // auto-schedule because autoMode is still true.
           this.limitDetector.resetDetection();
           await StateManager.setStatus(STATES.LIMIT_DETECTED);
           this.button.setState('limit_detected');

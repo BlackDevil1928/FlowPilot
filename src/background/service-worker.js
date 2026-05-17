@@ -134,14 +134,16 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   // Update state to RESUMING
   await chrome.storage.local.set({ car_state: 'resuming' });
 
-  // Get stored chat URL
-  const data = await chrome.storage.local.get('car_chatUrl');
+  // Get stored chat URL and ensure it's valid
+  const data = await chrome.storage.local.get(['car_chatUrl', 'car_customCommand']);
   const chatUrl = data.car_chatUrl;
 
   if (chatUrl) {
+    console.log('[FlowPilot BG] Opening chat:', chatUrl);
     await openChatTab(chatUrl);
   } else {
     console.error('[FlowPilot BG] No chat URL stored');
+    await chrome.storage.local.set({ car_state: 'idle' });
   }
 });
 
@@ -153,7 +155,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   switch (message.type) {
     case 'SCHEDULE_ALARM':
-      scheduleAlarm(message.retryTime)
+      // Store metadata immediately to ensure persistence even if tab closes
+      chrome.storage.local.set({
+        car_chatUrl: message.chatUrl,
+        car_customCommand: message.customCommand,
+        car_lastCommand: message.customCommand, // keep for auto-reschedule
+        car_state: 'scheduled',
+        car_retryTime: message.retryTime,
+      }).then(() => scheduleAlarm(message.retryTime))
         .then(() => sendResponse({ success: true }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true; // async response
@@ -162,8 +171,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       cancelAlarm()
         .then(() => chrome.storage.local.remove([
           'car_state', 'car_autoMode', 'car_retryTime',
-          'car_retryTimeDisplay', 'car_chatUrl', 'car_retryCount',
-          'car_customCommand',
+          'car_retryTimeDisplay', 'car_chatUrl', 'car_chatId',
+          'car_retryCount', 'car_customCommand',
         ]))
         .then(() => sendResponse({ success: true }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
@@ -174,6 +183,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then((alarm) => sendResponse({ alarm: alarm || null }))
         .catch(() => sendResponse({ alarm: null }));
       return true;
+  }
+});
+
+/**
+ * Monitor tab removals.
+ * If the user closes the "resuming" tab, we might want to know,
+ * but for now we just log it. The next time they open Claude,
+ * the content script will pick up the 'resuming' state.
+ */
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  const data = await chrome.storage.local.get('car_state');
+  if (data.car_state === 'resuming') {
+    console.log('[FlowPilot BG] Resuming tab was closed.');
   }
 });
 
@@ -204,12 +226,16 @@ chrome.runtime.onInstalled.addListener(async () => {
  * On browser startup, recover pending alarms.
  */
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('[FlowPilot BG] Browser started');
+  console.log('[FlowPilot BG] Browser started — checking for pending resumes');
   const data = await chrome.storage.local.get(['car_state', 'car_retryTime', 'car_chatUrl']);
+  
   if (data.car_state === 'scheduled' && data.car_retryTime) {
-    if (data.car_retryTime > Date.now()) {
+    const now = Date.now();
+    if (data.car_retryTime > now) {
+      console.log('[FlowPilot BG] Restoring alarm for future resume');
       await scheduleAlarm(data.car_retryTime);
     } else {
+      console.log('[FlowPilot BG] Resume time passed while browser was closed. Triggering now.');
       await chrome.storage.local.set({ car_state: 'resuming' });
       if (data.car_chatUrl) {
         await openChatTab(data.car_chatUrl);

@@ -131,6 +131,18 @@
     uid() {
       return 'car-' + Math.random().toString(36).slice(2, 9);
     },
+
+    /**
+     * Extract the Chat UUID from a Claude URL.
+     * Format: https://claude.ai/chat/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+     * @param {string} url
+     * @returns {string|null}
+     */
+    extractChatId(url) {
+      if (!url) return null;
+      const match = url.match(/\/chat\/([a-f0-9-]{36})/i);
+      return match ? match[1] : null;
+    },
   };
 
   window.CAR.Helpers = Helpers;
